@@ -580,10 +580,12 @@ async def call_openrouter_image_generation_with_retry_async(
     
     # Add GPT-Image specific parameters
     gen_params.update({
-        "modalities": ["image"],
-        "image_config": {
-            "aspect_ratio": aspect_ratio,
-            "image_size": image_size,
+        "extra_body": {
+            "modalities": ["image"],
+            "image_config": {
+                "aspect_ratio": aspect_ratio,
+                "image_size": image_size,
+            }
         }
     })
 
