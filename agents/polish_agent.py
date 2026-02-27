@@ -185,7 +185,6 @@ class PolishAgent(BaseAgent):
                     config={
                         "system_prompt": self.system_prompt,
                         "temperature": self.exp_config.temperature,
-                        "candidate_num": 1,
                         "aspect_ratio": data.get("additional_info", {}).get("rounded_ratio", "16:9"),
                         "image_size": "1k",
                     },
