@@ -77,18 +77,33 @@ class PolishAgent(BaseAgent):
         ]
 
         try:
-            response_list = await generation_utils.call_gemini_with_retry_async(
-                model_name=self.text_model_name,
-                contents=content_list,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.suggestion_system_prompt,
-                    temperature=1,
-                    candidate_count=1,
-                    max_output_tokens=50000,
-                ),
-                max_attempts=3,
-                retry_delay=10,
-            )
+            if "openrouter" in self.text_model_name:
+                # For OpenRouter, we might need to specify the model differently or adjust the call
+                response_list = await generation_utils.call_openrouter_with_retry_async(
+                    model_name=self.text_model_name.replace("openrouter-", ""),
+                    contents=content_list,
+                    config={
+                        "system_prompt": self.suggestion_system_prompt,
+                        "temperature": 1,
+                        "candidate_num": 1,
+                        "max_completion_tokens": 50000,
+                    },
+                    max_attempts=3,
+                    retry_delay=10,
+                )
+            else:
+                response_list = await generation_utils.call_gemini_with_retry_async(
+                    model_name=self.text_model_name,
+                    contents=content_list,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.suggestion_system_prompt,
+                        temperature=1,
+                        candidate_count=1,
+                        max_output_tokens=50000,
+                    ),
+                    max_attempts=3,
+                    retry_delay=10,
+                )
             return response_list[0] if response_list else ""
         except Exception as e:
             print(f"❌ Error during suggestion generation: {e}")
@@ -163,23 +178,38 @@ class PolishAgent(BaseAgent):
         
         # Generate polished image
         try:
-            response_list = await generation_utils.call_gemini_with_retry_async(
-                model_name=self.image_model_name,
-                contents=content_list,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_prompt, # Use the simpler task definition prompt
-                    temperature=self.exp_config.temperature,
-                    candidate_count=1,
-                    max_output_tokens=50000,
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(
-                        aspect_ratio=data.get("additional_info", {}).get("rounded_ratio", "16:9"),
-                        image_size="1k",
+            if "openrouter" in self.image_model_name:
+                response_list = await generation_utils.call_openrouter_image_generation_with_retry_async(
+                    model_name=self.image_model_name.replace("openrouter-", ""),
+                    contents=content_list,
+                    config={
+                        "system_prompt": self.system_prompt,
+                        "temperature": self.exp_config.temperature,
+                        "candidate_num": 1,
+                        "aspect_ratio": data.get("additional_info", {}).get("rounded_ratio", "16:9"),
+                        "image_size": "1k",
+                    },
+                    max_attempts=5,
+                    retry_delay=30,
+                )
+            else:
+                response_list = await generation_utils.call_gemini_with_retry_async(
+                    model_name=self.image_model_name,
+                    contents=content_list,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.system_prompt, # Use the simpler task definition prompt
+                        temperature=self.exp_config.temperature,
+                        candidate_count=1,
+                        max_output_tokens=50000,
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(
+                            aspect_ratio=data.get("additional_info", {}).get("rounded_ratio", "16:9"),
+                            image_size="1k",
+                        ),
                     ),
-                ),
-                max_attempts=5,
-                retry_delay=30,
-            )
+                    max_attempts=5,
+                    retry_delay=30,
+                )
             
             if response_list and response_list[0]:
                 # Convert PNG to JPG

@@ -75,6 +75,16 @@ else:
     print("Warning: Could not initialize OpenAI Client. Missing credentials.")
     openai_client = None
 
+openrouter_api_key = get_config_val("api_keys", "openrouter_api_key", "OPENROUTER_API_KEY", "")
+if openrouter_api_key:
+    openrouter_client = AsyncOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=openrouter_api_key
+    )
+    print("Initialized OpenRouter Client with API Key")
+else:
+    print("Warning: Could not initialize OpenRouter Client. Missing credentials.")
+    openrouter_client = None
 
 
 def _convert_to_gemini_parts(contents: List[Dict[str, Any]]) -> List[types.Part]:
@@ -445,6 +455,153 @@ async def call_openai_image_generation_with_retry_async(
             context_msg = f" for {error_context}" if error_context else ""
             print(
                 f"Attempt {attempt + 1} for OpenAI image generation model {model_name} failed{context_msg}: {e}. Retrying in {retry_delay} seconds..."
+            )
+
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(retry_delay)
+            else:
+                print(f"Error: All {max_attempts} attempts failed{context_msg}")
+                return ["Error"]
+
+    return ["Error"]
+
+
+async def call_openrouter_with_retry_async(
+    model_name, contents, config, max_attempts=5, retry_delay=30, error_context=""
+):
+    """
+    ASYNC: Call OpenRouter API with asynchronous retry logic.
+    This follows the same pattern as OpenAI's implementation, since OpenRouter is compatible with OpenAI's API.
+    """
+
+    system_prompt = config["system_prompt"]
+    temperature = config["temperature"]
+    candidate_num = config["candidate_num"]
+    max_completion_tokens = config["max_completion_tokens"]
+    response_text_list = []
+
+    # --- Preparation Phase ---
+    # Convert to the OpenAI-specific format
+    current_contents = contents
+
+    # --- Validation and Remediation Phase ---
+    # We loop until we get a single successful response, proving the input is valid.
+    is_input_valid = False
+    for attempt in range(max_attempts):
+        try:
+            openai_contents = _convert_to_openai_format(current_contents)
+            # Attempt to generate the very first candidate.
+            first_response = await openrouter_client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": openai_contents}
+                ],
+                temperature=temperature,
+                max_completion_tokens=max_completion_tokens,
+            )
+            # If we reach here, the input is valid.
+            response_text_list.append(first_response.choices[0].message.content)
+            is_input_valid = True
+            break  # Exit the validation loop
+
+        except Exception as e:
+            error_str = str(e).lower()
+            context_msg = f" for {error_context}" if error_context else ""
+            print(
+                f"Validation attempt {attempt + 1} failed{context_msg}: {error_str}. Retrying in {retry_delay} seconds..."
+            )
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(retry_delay)
+
+    # --- Sampling Phase ---
+    if not is_input_valid:
+        print(
+            f"Error: All {max_attempts} attempts failed to validate the input{context_msg}. Returning errors."
+        )
+        return ["Error"] * candidate_num
+
+    # We already have 1 successful candidate, now generate the rest.
+    remaining_candidates = candidate_num - 1
+    if remaining_candidates > 0:
+        print(
+            f"Input validated. Now generating remaining {remaining_candidates} candidates..."
+        )
+        valid_openai_contents = _convert_to_openai_format(current_contents)
+        tasks = [
+            openrouter_client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": valid_openai_contents}
+                ],
+                temperature=temperature,
+                max_completion_tokens=max_completion_tokens,
+            )
+            for _ in range(remaining_candidates)
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in results:
+            if isinstance(res, Exception):
+                print(f"Error generating a subsequent candidate: {res}")
+                response_text_list.append("Error")
+            else:
+                response_text_list.append(res.choices[0].message.content)
+
+    return response_text_list
+
+
+async def call_openrouter_image_generation_with_retry_async(
+    model_name, contents, config, max_attempts=5, retry_delay=30, error_context=""
+):
+    """
+    ASYNC: Call OpenRouter Image Generation API with asynchronous retry logic.
+    This follows the same pattern as OpenAI's image generation implementation, since OpenRouter is compatible with OpenAI's API.
+    """
+    aspect_ratio = config.get("aspect_ratio", "1:1")
+    image_size = config.get("image_size", "1k")
+    system_prompt = config.get("system_prompt", None)
+    temperature = config.get("temperature", None)
+    current_contents = contents
+    
+    # Base parameters for all models
+    openai_contents = _convert_to_openai_format(current_contents)
+    gen_params = {
+        "model": model_name,
+        "messages": [
+            {"role": "user", "content": openai_contents}
+        ],
+    }
+    if system_prompt:
+        gen_params["messages"].insert(0, {"role": "system", "content": system_prompt})
+    if temperature is not None:
+        gen_params["temperature"] = temperature
+    
+    # Add GPT-Image specific parameters
+    gen_params.update({
+        "modalities": ["image"],
+        "aspect_ratio": aspect_ratio,
+        "image_size": image_size,
+    })
+
+    for attempt in range(max_attempts):
+        try:
+            response = await openrouter_client.chat.completions.create(**gen_params)
+            
+            # OpenRouter images.generate returns a list of images in response.data
+            if response.get("choices") and response.choices[0].message.get("images"):
+                return [image["image_url"]["url"] for image in response.choices[0].message["images"]]
+            else:
+                print(f"[Warning]: Failed to generate image via OpenRouter, no data returned.")
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(retry_delay)
+                continue
+
+        except Exception as e:
+            context_msg = f" for {error_context}" if error_context else ""
+            print(
+                f"Attempt {attempt + 1} for OpenRouter image generation model {model_name} failed{context_msg}: {e}. Retrying in {retry_delay} seconds..."
             )
 
             if attempt < max_attempts - 1:

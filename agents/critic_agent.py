@@ -113,18 +113,32 @@ class CriticAgent(BaseAgent):
             "text": f"Detailed Description: {detailed_description}\n{cfg['context_labels'][0]}: {content}\n{cfg['context_labels'][1]}: {visual_intent}\nYour Output:",
         })
 
-        response_list = await generation_utils.call_gemini_with_retry_async(
-            model_name=self.model_name,
-            contents=content_list,
-            config=types.GenerateContentConfig(
-                system_instruction=self.system_prompt,
-                temperature=self.exp_config.temperature,
-                candidate_count=1,
-                max_output_tokens=50000,
-            ),
-            max_attempts=5,
-            retry_delay=5,
-        )
+        if "openrouter" in self.model_name:
+            response_list = await generation_utils.call_openrouter_with_retry_async(
+                model_name=self.model_name.replace("openrouter-", ""),
+                contents=content_list,
+                config={
+                    "system_prompt": self.system_prompt,
+                    "temperature": self.exp_config.temperature,
+                    "candidate_num": 1,
+                    "max_completion_tokens": 50000,
+                },
+                max_attempts=5,
+                retry_delay=5,
+            )
+        else:
+            response_list = await generation_utils.call_gemini_with_retry_async(
+                model_name=self.model_name,
+                contents=content_list,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.system_prompt,
+                    temperature=self.exp_config.temperature,
+                    candidate_count=1,
+                    max_output_tokens=50000,
+                ),
+                max_attempts=5,
+                retry_delay=5,
+            )
         
         cleaned_response = (
             response_list[0].replace("```json", "").replace("```", "").strip()

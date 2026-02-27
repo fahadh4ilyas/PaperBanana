@@ -133,7 +133,21 @@ class VanillaAgent(BaseAgent):
                 aspect_ratio=data["additional_info"]["rounded_ratio"],
                 image_size="1k",
             )
-        
+
+        if "openrouter" in self.model_name:
+            image_config = {
+                "system_prompt": self.system_prompt,
+                "temperature": self.exp_config.temperature,
+                "aspect_ratio": "3:2",
+                "image_size": "1k"
+            }
+            response_list = await generation_utils.call_openrouter_image_generation_with_retry_async(
+                model_name=self.model_name.replace("openrouter-", ""),
+                contents=content_list,
+                config=image_config,
+                max_attempts=5,
+                retry_delay=30,
+            )
         if "gemini" in self.model_name:
             response_list = await generation_utils.call_gemini_with_retry_async(
                 model_name=self.model_name,
