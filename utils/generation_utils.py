@@ -592,10 +592,11 @@ async def call_openrouter_image_generation_with_retry_async(
     for attempt in range(max_attempts):
         try:
             response = await openrouter_client.chat.completions.create(**gen_params)
+            response = response.model_dump()
             
             # OpenRouter images.generate returns a list of images in response.data
-            if response.get("choices") and response.choices[0].message.get("images"):
-                return [image["image_url"]["url"] for image in response.choices[0].message["images"]]
+            if "choices" in response and "images" in response["choices"][0]["message"]:
+                return [image["image_url"]["url"] for image in response["choices"][0]["message"]["images"]]
             else:
                 print(f"[Warning]: Failed to generate image via OpenRouter, no data returned.")
                 if attempt < max_attempts - 1:
