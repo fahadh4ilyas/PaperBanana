@@ -275,6 +275,10 @@ async def generate_diagram(
         if (await request.state.is_disconnected()):
             LOGGER.info("Client disconnected, cancelling the task...")
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully.")
             return
         await asyncio.sleep(0.1)
 
@@ -321,6 +325,10 @@ async def generate_plot(
         if (await request.state.is_disconnected()):
             LOGGER.info("Client disconnected, cancelling the task...")
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully.")
             return
         await asyncio.sleep(0.1)
 
@@ -383,6 +391,10 @@ async def polish_image(
                     image_path.unlink()
                 except Exception as e:
                     LOGGER.error(f"Failed to delete temporary image {image_path} after cancellation: {e}")
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    LOGGER.info("Task cancelled successfully.")
                 return
             await asyncio.sleep(0.1)
         result = await task
