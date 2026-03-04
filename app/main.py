@@ -169,6 +169,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPB
                 timeout=5.0
             )
             response.raise_for_status()
+            return token
         except httpx.HTTPStatusError as e:
             LOGGER.warning(f"Token verification failed with status code {e.response.status_code}: {e.response.text}")
             raise HTTPException(status_code=401, detail="Invalid API token")
