@@ -1,6 +1,7 @@
 import base64
 import sys
 import time
+import timeit
 import traceback
 import typing
 from pathlib import Path
@@ -167,6 +168,16 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPB
         LOGGER.warning(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid API token")
 
+@app.middleware("http")
+async def timing_request(request: Request, call_next):
+
+    start = timeit.default_timer()
+    request.state.is_disconnected = request.is_disconnected
+    response = await call_next(request)
+    response.headers["X-Process-Time"] = f'{timeit.default_timer() - start:.6f}'
+
+    return response
+
 @app.exception_handler(Exception)
 async def value_error_handler(request: Request, exc: Exception):
     LOGGER.exception("Unhandled exception occurred")
@@ -250,6 +261,7 @@ async def generate_diagram(
         return_detailed=return_detailed,
     )
 
+
 @app.post('/plot')
 async def generate_plot(
     request: Request,
@@ -284,6 +296,7 @@ async def generate_plot(
         exp_mode=f"dev_{pipeline_type}" if pipeline_type != "vanilla" else "vanilla",
         return_detailed=return_detailed,
     )
+
 
 @app.post('/polish')
 async def polish_image(
@@ -341,6 +354,7 @@ async def polish_image(
         LOGGER.error(f"Failed to delete temporary image {image_path}: {e}")
 
     return JSONResponse(result) if return_detailed else JSONResponse({f"polished_{task_name}_base64_jpg": result[result["eval_image_field"]]})
+
 
 @app.get('/', include_in_schema=False)
 async def redirect():
