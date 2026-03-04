@@ -286,7 +286,7 @@ async def generate_plot(
     )
 
 @app.post('/polish')
-async def polish_diagram(
+async def polish_image(
     request: Request,
     image_base64: str = Body(..., description="The input diagram or plot to be polished, provided as a base64-encoded string of the image in JPG format."),
     task_name: typing.Literal['diagram', 'plot'] = Body(..., description="The type of the task, either 'diagram' or 'plot'. This helps the polish agent understand the context and apply appropriate polishing strategies."),
