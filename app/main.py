@@ -1,4 +1,6 @@
+import asyncio
 import base64
+import httpx
 import sys
 import time
 import timeit
@@ -157,16 +159,22 @@ app = FastAPI(
 
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
     token = credentials.credentials
-    client = AsyncOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=token
-    )
-    try:
-        await client.models.list()
-        return token
-    except Exception as e:
-        LOGGER.warning(f"Token verification failed: {e}")
-        raise HTTPException(status_code=401, detail="Invalid API token")
+    async with httpx.AsyncClient() as http_client:
+        try:
+            response = await http_client.get(
+                url="https://openrouter.ai/api/v1/key",
+                headers={
+                    "Authorization": f"Bearer {token}"
+                },
+                timeout=5.0
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            LOGGER.warning(f"Token verification failed with status code {e.response.status_code}: {e.response.text}")
+            raise HTTPException(status_code=401, detail="Invalid API token")
+        except Exception as e:
+            LOGGER.warning(f"Token verification failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid API token")
 
 @app.middleware("http")
 async def timing_request(request: Request, call_next):
@@ -251,7 +259,7 @@ async def generate_diagram(
         "max_critic_rounds": max_critic_rounds,
     }
 
-    return await generate(
+    task = asyncio.create_task(generate(
         data=data,
         task_name="diagram",
         model_name=model_name,
@@ -261,7 +269,16 @@ async def generate_diagram(
         exp_mode=f"dev_{pipeline_type}" if pipeline_type != "vanilla" else "vanilla",
         return_detailed=return_detailed,
         auth_token=auth_token,
-    )
+    ))
+
+    while not task.done():
+        if (await request.state.is_disconnected()):
+            LOGGER.info("Client disconnected, cancelling the task...")
+            task.cancel()
+            return
+        await asyncio.sleep(0.1)
+
+    return await task
 
 
 @app.post('/plot')
@@ -288,7 +305,7 @@ async def generate_plot(
         "max_critic_rounds": max_critic_rounds,
     }
 
-    return await generate(
+    task = asyncio.create_task(generate(
         data=data,
         task_name="plot",
         model_name=model_name,
@@ -298,7 +315,16 @@ async def generate_plot(
         exp_mode=f"dev_{pipeline_type}" if pipeline_type != "vanilla" else "vanilla",
         return_detailed=return_detailed,
         auth_token=auth_token,
-    )
+    ))
+
+    while not task.done():
+        if (await request.state.is_disconnected()):
+            LOGGER.info("Client disconnected, cancelling the task...")
+            task.cancel()
+            return
+        await asyncio.sleep(0.1)
+
+    return await task
 
 
 @app.post('/polish')
@@ -348,7 +374,18 @@ async def polish_image(
 
     LOGGER.info(f"Processing polish {task_name} with model_name: {model_name}, image_model_name: {image_model_name}, temperature: {temperature}, aspect_ratio: {aspect_ratio}")
     with processor.with_config(api_key=auth_token):
-        result = await processor.process_single_query(data, do_eval=False)
+        task = asyncio.create_task(processor.process_single_query(data, do_eval=False))
+        while not task.done():
+            if (await request.state.is_disconnected()):
+                LOGGER.info("Client disconnected, cancelling the polish task...")
+                task.cancel()
+                try:
+                    image_path.unlink()
+                except Exception as e:
+                    LOGGER.error(f"Failed to delete temporary image {image_path} after cancellation: {e}")
+                return
+            await asyncio.sleep(0.1)
+        result = await task
     
     # delete the temporary image after processing
     try:
