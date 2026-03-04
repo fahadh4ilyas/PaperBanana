@@ -1,0 +1,29 @@
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    tzdata \
+    && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
+
+ENV TZ=Asia/Jakarta
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+# Ensure data directory exists and has permissions
+RUN mkdir -p data/PaperBananaBench/diagram data/PaperBananaBench/plot && chmod -R 777 data
+
+# Expose port
+EXPOSE 8081
+
+# Run Streamlit
+CMD ["python", "uvicorn.main.py"]

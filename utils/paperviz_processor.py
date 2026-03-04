@@ -18,6 +18,7 @@ Processing pipeline of PaperVizAgent
 
 import asyncio
 from typing import List, Dict, Any, AsyncGenerator
+from contextlib import contextmanager
 
 import numpy as np
 from tqdm.asyncio import tqdm
@@ -56,6 +57,28 @@ class PaperVizProcessor:
         self.critic_agent = critic_agent
         self.retriever_agent = retriever_agent
         self.polish_agent = polish_agent
+    
+    @contextmanager
+    def with_config(self, api_key: str):
+        """Context manager to set API key for all agents"""
+        try:
+            self.vanilla_agent.api_key = api_key
+            self.planner_agent.api_key = api_key
+            self.visualizer_agent.api_key = api_key
+            self.stylist_agent.api_key = api_key
+            self.critic_agent.api_key = api_key
+            self.retriever_agent.api_key = api_key
+            self.polish_agent.api_key = api_key
+            yield self
+        finally:
+            # Clear API keys after use
+            self.vanilla_agent.api_key = None
+            self.planner_agent.api_key = None
+            self.visualizer_agent.api_key = None
+            self.stylist_agent.api_key = None
+            self.critic_agent.api_key = None
+            self.retriever_agent.api_key = None
+            self.polish_agent.api_key = None
 
     async def _run_critic_iterations(self, data: Dict[str, Any], task_name: str, max_rounds: int = 3, source: str = "stylist") -> Dict[str, Any]:
         """

@@ -162,19 +162,35 @@ class VisualizerAgent(BaseAgent):
                 )
             
             if "openrouter" in self.model_name:
-                image_config = {
-                    "system_prompt": self.system_prompt,
-                    "temperature": self.exp_config.temperature,
-                    "aspect_ratio": gen_config_args.get("image_config").aspect_ratio if gen_config_args.get("image_config") else "1:1",
-                    "image_size": gen_config_args.get("image_config").image_size if gen_config_args.get("image_config") else "1k",
-                }
-                response_list = await generation_utils.call_openrouter_image_generation_with_retry_async(
-                    model_name=self.model_name.replace("openrouter-", ""),
-                    contents=content_list,
-                    config=image_config,
-                    max_attempts=5,
-                    retry_delay=30,
-                )
+                if cfg["use_image_generation"]:
+                    image_config = {
+                        "system_prompt": self.system_prompt,
+                        "temperature": self.exp_config.temperature,
+                        "aspect_ratio": gen_config_args.get("image_config").aspect_ratio if gen_config_args.get("image_config") else "1:1",
+                        "image_size": gen_config_args.get("image_config").image_size if gen_config_args.get("image_config") else "1k",
+                        "api_key": self.api_key,
+                    }
+                    response_list = await generation_utils.call_openrouter_image_generation_with_retry_async(
+                        model_name=self.model_name.replace("openrouter-", ""),
+                        contents=content_list,
+                        config=image_config,
+                        max_attempts=5,
+                        retry_delay=30,
+                    )
+                else:
+                    response_list = await generation_utils.call_openrouter_with_retry_async(
+                        model_name=self.model_name.replace("openrouter-", ""),
+                        contents=content_list,
+                        config={
+                            "system_prompt": self.system_prompt,
+                            "temperature": self.exp_config.temperature,
+                            "candidate_num": 1,
+                            "max_completion_tokens": cfg["max_output_tokens"],
+                            "api_key": self.api_key,
+                        },
+                        max_attempts=5,
+                        retry_delay=30,
+                    )
             elif "gemini" in self.model_name:
                 response_list = await generation_utils.call_gemini_with_retry_async(
                     model_name=self.model_name,

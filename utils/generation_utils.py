@@ -478,11 +478,20 @@ async def call_openrouter_with_retry_async(
     temperature = config["temperature"]
     candidate_num = config["candidate_num"]
     max_completion_tokens = config["max_completion_tokens"]
+    api_key = config.get("api_key", None)
     response_text_list = []
 
     # --- Preparation Phase ---
     # Convert to the OpenAI-specific format
     current_contents = contents
+
+    client = openrouter_client
+    if api_key:
+        # Reinitialize OpenRouter client with the provided API key for this call
+        client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
 
     # --- Validation and Remediation Phase ---
     # We loop until we get a single successful response, proving the input is valid.
@@ -491,7 +500,7 @@ async def call_openrouter_with_retry_async(
         try:
             openai_contents = _convert_to_openai_format(current_contents)
             # Attempt to generate the very first candidate.
-            first_response = await openrouter_client.chat.completions.create(
+            first_response = await client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -529,7 +538,7 @@ async def call_openrouter_with_retry_async(
         )
         valid_openai_contents = _convert_to_openai_format(current_contents)
         tasks = [
-            openrouter_client.chat.completions.create(
+            client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -563,6 +572,7 @@ async def call_openrouter_image_generation_with_retry_async(
     image_size = config.get("image_size", "1k")
     system_prompt = config.get("system_prompt", None)
     temperature = config.get("temperature", None)
+    api_key = config.get("api_key", None)
     current_contents = contents
     
     # Base parameters for all models
@@ -589,9 +599,17 @@ async def call_openrouter_image_generation_with_retry_async(
         }
     })
 
+    client = openrouter_client
+    if api_key:
+        # Reinitialize OpenRouter client with the provided API key for this call
+        client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
+
     for attempt in range(max_attempts):
         try:
-            response = await openrouter_client.chat.completions.create(**gen_params)
+            response = await client.chat.completions.create(**gen_params)
             response = response.model_dump()
             
             # OpenRouter images.generate returns a list of images in response.data

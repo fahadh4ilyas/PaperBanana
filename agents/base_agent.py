@@ -37,6 +37,7 @@ class BaseAgent(ABC):
         self.model_name = model_name
         self.system_prompt = system_prompt
         self.exp_config = exp_config
+        self.api_key = None
 
     @abstractmethod
     async def process(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:

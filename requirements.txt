@@ -12,3 +12,7 @@ matplotlib
 python-dotenv
 pyyaml
 google-auth
+pydantic-settings
+fastapi
+python-multipart
+uvicorn
