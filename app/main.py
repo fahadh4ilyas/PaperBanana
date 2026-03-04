@@ -197,6 +197,7 @@ async def generate(
     max_critic_rounds: int,
     exp_mode: str,
     return_detailed: bool,
+    auth_token: str
 ):
     
     exp_config = config.ExpConfig(
@@ -221,7 +222,7 @@ async def generate(
     )
 
     LOGGER.info(f"Processing {task_name} with model_name: {model_name}, image_model_name: {image_model_name}, temperature: {temperature}, max_critic_rounds: {max_critic_rounds}, exp_mode: {exp_mode}")
-    with processor.with_config(api_key=None):
+    with processor.with_config(api_key=auth_token):
         result = await processor.process_single_query(data, do_eval=False)
 
     return JSONResponse(result) if return_detailed else JSONResponse({f"target_{task_name}_base64_jpg": result[result["eval_image_field"]]})
@@ -259,6 +260,7 @@ async def generate_diagram(
         max_critic_rounds=max_critic_rounds,
         exp_mode=f"dev_{pipeline_type}" if pipeline_type != "vanilla" else "vanilla",
         return_detailed=return_detailed,
+        auth_token=auth_token,
     )
 
 
@@ -295,6 +297,7 @@ async def generate_plot(
         max_critic_rounds=max_critic_rounds,
         exp_mode=f"dev_{pipeline_type}" if pipeline_type != "vanilla" else "vanilla",
         return_detailed=return_detailed,
+        auth_token=auth_token,
     )
 
 
