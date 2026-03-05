@@ -238,7 +238,7 @@ async def generate(
     return JSONResponse(result) if return_detailed else JSONResponse({f"target_{task_name}_base64_jpg": result[result["eval_image_field"]]})
 
 
-@app.post('/diagram')
+@app.post('/diagram', tags=['generate'])
 async def generate_diagram(
     request: Request,
     method_section: str = Body(..., description="The method section of the scientific paper to visualize, provided as plain text. Markdown format is recommended.", examples=[EXAMPLE_METHOD]),
@@ -298,7 +298,7 @@ async def generate_diagram(
     return await task
 
 
-@app.post('/plot')
+@app.post('/plot', tags=['generate'])
 async def generate_plot(
     request: Request,
     input_data: dict = Body(..., description="The input data for generating the plot.", examples=[EXAMPLE_INPUT_DATA]),
@@ -359,7 +359,7 @@ async def generate_plot(
     return await task
 
 
-@app.post('/polish')
+@app.post('/polish', tags=['polish'])
 async def polish_image(
     request: Request,
     image_base64: str = Body(..., description="The input diagram or plot to be polished, provided as a base64-encoded string of the image in JPG format."),
@@ -461,13 +461,13 @@ async def eval_image(
 
     if not return_detailed:
         for key in list(result.keys()):
-            if not key.endswith("_outcome") or not key.endswith("_reasoning"):
+            if not (key.endswith("_outcome") or key.endswith("_reasoning")):
                 result.pop(key)
 
     return JSONResponse(result)
 
 
-@app.post('/eval_diagram')
+@app.post('/eval/diagram', tags=['eval'])
 async def eval_diagram(
     request: Request,
     image_base64: str = Body(..., description="The input diagram to be evaluated, provided as a base64-encoded string of the image in JPG format."),
@@ -489,7 +489,7 @@ async def eval_diagram(
         "content": method_section,
         "visual_intent": figure_caption,
         "eval_image_field": "target_diagram_base64_jpg",
-        "target_diagram_base64_jpg": image_base64,
+        "target_diagram_base64_jpg": image_base64.split(",")[-1],
         "path_to_gt_image": gt_image_path.as_posix(),
     }
 
@@ -533,7 +533,7 @@ async def eval_diagram(
     return await task
 
 
-@app.post('/eval_plot')
+@app.post('/eval/plot', tags=['eval'])
 async def eval_plot(
     request: Request,
     image_base64: str = Body(..., description="The input plot to be evaluated, provided as a base64-encoded string of the image in JPG format."),
@@ -555,7 +555,7 @@ async def eval_plot(
         "content": input_data,
         "visual_intent": figure_caption,
         "eval_image_field": "target_plot_base64_jpg",
-        "target_plot_base64_jpg": image_base64,
+        "target_plot_base64_jpg": image_base64.split(",")[-1],
         "path_to_gt_image": gt_image_path.as_posix(),
     }
 
