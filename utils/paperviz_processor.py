@@ -57,6 +57,7 @@ class PaperVizProcessor:
         self.critic_agent = critic_agent
         self.retriever_agent = retriever_agent
         self.polish_agent = polish_agent
+        self.api_key = None
     
     @contextmanager
     def with_config(self, api_key: str):
@@ -69,6 +70,7 @@ class PaperVizProcessor:
             self.critic_agent.api_key = api_key
             self.retriever_agent.api_key = api_key
             self.polish_agent.api_key = api_key
+            self.api_key = api_key
             yield self
         finally:
             # Clear API keys after use
@@ -79,6 +81,7 @@ class PaperVizProcessor:
             self.critic_agent.api_key = None
             self.retriever_agent.api_key = None
             self.polish_agent.api_key = None
+            self.api_key = None
 
     async def _run_critic_iterations(self, data: Dict[str, Any], task_name: str, max_rounds: int = 3, source: str = "stylist") -> Dict[str, Any]:
         """
@@ -246,7 +249,7 @@ class PaperVizProcessor:
         Evaluation function - uses referenced setting (GT shown first)
         """
         data = await get_score_for_image_referenced(
-            data, task_name=exp_config.task_name, work_dir=exp_config.work_dir
+            data, task_name=exp_config.task_name, model_name=exp_config.model_name, work_dir=exp_config.work_dir, api_key=self.api_key
         )
         return data
 

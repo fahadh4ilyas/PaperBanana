@@ -31,6 +31,7 @@ try:
     from agents.polish_agent import PolishAgent
     print("DEBUG: Imported all agents")
     from utils import config
+    from utils.eval_toolkits import get_score_for_image_referenced
     from utils.paperviz_processor import PaperVizProcessor
     print("DEBUG: Imported utils")
 
@@ -443,6 +444,159 @@ async def polish_image(
         LOGGER.error(f"Failed to delete temporary image {image_path}: {e}")
 
     return JSONResponse(result) if return_detailed else JSONResponse({f"polished_{task_name}_base64_jpg": result[result["eval_image_field"]]})
+
+
+async def eval_image(
+    data: dict,
+    task_name: str,
+    model_name: str,
+    return_detailed: bool,
+    auth_token: str,
+):
+
+    LOGGER.info(f"Evaluating {task_name} with model_name: {model_name}")
+    result = await get_score_for_image_referenced(
+        sample_data=data, task_name=task_name, model_name=model_name, api_key=auth_token
+    )
+
+    if not return_detailed:
+        for key in list(result.keys()):
+            if not key.endswith("_outcome") or not key.endswith("_reasoning"):
+                result.pop(key)
+
+    return JSONResponse(result)
+
+
+@app.post('/eval_diagram')
+async def eval_diagram(
+    request: Request,
+    image_base64: str = Body(..., description="The input diagram to be evaluated, provided as a base64-encoded string of the image in JPG format."),
+    ground_truth_image_base64: str = Body(..., description="The ground truth diagram to be used as reference for evaluation, provided as a base64-encoded string of the image in JPG format."),
+    method_section: str = Body(..., description="The method section of the scientific paper to visualize, provided as plain text. Markdown format is recommended.", examples=[EXAMPLE_METHOD]),
+    figure_caption: str = Body(..., description="The caption of the figure to evaluate, provided as plain text. Markdown format is recommended.", examples=[EXAMPLE_CAPTION]),
+    model_name: str = Body('google/gemini-3-pro-preview', description="The name of the language model to use for processing."),
+    return_detailed: bool = Body(False, description="Whether to return detailed intermediate outputs from all agents in the response."),
+    timeout: typing.Optional[float] = Body(None, description="Optional timeout in seconds for the entire processing of the request. If the processing time exceeds this limit, the task will be cancelled and a timeout error will be returned.", examples=[None]),
+    auth_token: str = Depends(verify_token)
+):
+
+    gt_image_path = Path(__file__).parent.parent / "data" / "PaperBananaBench" / "diagram" / f"temp_gt_{auth_token.split('-')[-1]}_{int(time.time())}_{uuid4().hex}.jpg"
+    gt_image_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(gt_image_path, "wb") as f:
+        f.write(base64.b64decode(ground_truth_image_base64.split(",")[-1]))
+
+    data = {
+        "content": method_section,
+        "visual_intent": figure_caption,
+        "eval_image_field": "target_diagram_base64_jpg",
+        "target_diagram_base64_jpg": image_base64,
+        "path_to_gt_image": gt_image_path.as_posix(),
+    }
+
+    task = asyncio.create_task(eval_image(
+        data=data,
+        task_name="diagram",
+        model_name="openrouter-" + model_name,
+        return_detailed=return_detailed,
+        auth_token=auth_token,
+    ))
+
+    counter = 0
+    while not task.done():
+        if (await request.state.is_disconnected()):
+            LOGGER.info("Client disconnected, cancelling the evaluation task...")
+            task.cancel()
+            try:
+                gt_image_path.unlink()
+            except Exception as e:
+                LOGGER.error(f"Failed to delete temporary ground truth image {gt_image_path} after cancellation: {e}")
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully.")
+            return
+        await asyncio.sleep(0.1)
+        counter += 0.1
+        if timeout is not None and counter >= timeout:
+            LOGGER.info(f"Request processing exceeded timeout of {timeout} seconds, cancelling the evaluation task...")
+            task.cancel()
+            try:
+                gt_image_path.unlink()
+            except Exception as e:
+                LOGGER.error(f"Failed to delete temporary ground truth image {gt_image_path} after cancellation: {e}")
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully due to timeout.")
+            return JSONResponse({"error": "Request processing exceeded timeout limit."}, status_code=504)
+    
+    return await task
+
+
+@app.post('/eval_plot')
+async def eval_plot(
+    request: Request,
+    image_base64: str = Body(..., description="The input plot to be evaluated, provided as a base64-encoded string of the image in JPG format."),
+    ground_truth_image_base64: str = Body(..., description="The ground truth plot to be used as reference for evaluation, provided as a base64-encoded string of the image in JPG format."),
+    input_data: dict = Body(..., description="The original input data used for generating the plot, provided as a JSON object.", examples=[EXAMPLE_INPUT_DATA]),
+    figure_caption: str = Body(..., description="The caption of the figure to evaluate, provided as plain text. Markdown format is recommended.", examples=[EXAMPLE_PLOT_CAPTION]),
+    model_name: str = Body('google/gemini-3-pro-preview', description="The name of the language model to use for processing."),
+    return_detailed: bool = Body(False, description="Whether to return detailed intermediate outputs from all agents in the response."),
+    timeout: typing.Optional[float] = Body(None, description="Optional timeout in seconds for the entire processing of the request. If the processing time exceeds this limit, the task will be cancelled and a timeout error will be returned.", examples=[None]),
+    auth_token: str = Depends(verify_token)
+):
+    
+    gt_image_path = Path(__file__).parent.parent / "data" / "PaperBananaBench" / "plot" / f"temp_gt_{auth_token.split('-')[-1]}_{int(time.time())}_{uuid4().hex}.jpg"
+    gt_image_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(gt_image_path, "wb") as f:
+        f.write(base64.b64decode(ground_truth_image_base64.split(",")[-1]))
+
+    data = {
+        "content": input_data,
+        "visual_intent": figure_caption,
+        "eval_image_field": "target_plot_base64_jpg",
+        "target_plot_base64_jpg": image_base64,
+        "path_to_gt_image": gt_image_path.as_posix(),
+    }
+
+    task = asyncio.create_task(eval_image(
+        data=data,
+        task_name="plot",
+        model_name="openrouter-" + model_name,
+        return_detailed=return_detailed,
+        auth_token=auth_token,
+    ))
+
+    counter = 0
+    while not task.done():
+        if (await request.state.is_disconnected()):
+            LOGGER.info("Client disconnected, cancelling the evaluation task...")
+            task.cancel()
+            try:
+                gt_image_path.unlink()
+            except Exception as e:
+                LOGGER.error(f"Failed to delete temporary ground truth image {gt_image_path} after cancellation: {e}")
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully.")
+            return
+        await asyncio.sleep(0.1)
+        counter += 0.1
+        if timeout is not None and counter >= timeout:
+            LOGGER.info(f"Request processing exceeded timeout of {timeout} seconds, cancelling the evaluation task...")
+            task.cancel()
+            try:
+                gt_image_path.unlink()
+            except Exception as e:
+                LOGGER.error(f"Failed to delete temporary ground truth image {gt_image_path} after cancellation: {e}")
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully due to timeout.")
+            return JSONResponse({"error": "Request processing exceeded timeout limit."}, status_code=504)
+    
+    return await task
 
 
 @app.get('/', include_in_schema=False)

@@ -28,6 +28,7 @@ from utils.generation_utils import (
     call_gemini_with_retry_async,
     call_claude_with_retry_async,
     call_openai_with_retry_async,
+    call_openrouter_with_retry_async,
 )
 
 # Prompt mapping: task_name -> eval_dim -> system_prompt
@@ -124,7 +125,8 @@ async def _run_single_eval_ref(
     visual_intent: str,
     gt_image_base64: str,
     model_image_base64: str,
-    model_name: str
+    model_name: str,
+    api_key: str = None,
 ) -> tuple[str, dict]:
     """Run a single evaluation dimension for referenced comparison."""
     # Get the appropriate prompt based on task_name and eval_dim
@@ -167,7 +169,21 @@ async def _run_single_eval_ref(
     valid_winners = ["Human", "Model", "Both are good", "Both are bad"]
     
     try:
-        if "gemini" in model_name:
+        if "openrouter" in model_name:
+            response_text_list = await call_openrouter_with_retry_async(
+                model_name=model_name.replace("openrouter-", ""),
+                contents=content_list,
+                config={
+                    "system_prompt": sys_prompt,
+                    "temperature": 1,
+                    "candidate_num": 1,
+                    "max_completion_tokens": 50000,
+                    "api_key": api_key,
+                },
+                max_attempts=5,
+                retry_delay=30,
+            )
+        elif "gemini" in model_name:
             response_text_list = await call_gemini_with_retry_async(
                 model_name=model_name,
                 contents=content_list,
@@ -226,7 +242,7 @@ async def _run_single_eval_ref(
 
 
 async def get_score_for_image_referenced(
-    sample_data: dict, task_name: str = "diagram", model_name: str = "", work_dir = None
+    sample_data: dict, task_name: str = "diagram", model_name: str = "", work_dir = None, api_key: str = None
 ) -> dict:
     """Get score for diagram referenced comparison.
     
@@ -239,6 +255,8 @@ async def get_score_for_image_referenced(
     from pathlib import Path
 
     raw_content = sample_data["content"]
+    if isinstance(raw_content, (dict, list)):
+        raw_content = json.dumps(raw_content)
     visual_intent = sample_data["visual_intent"]
     
     if "path_to_gt_image" not in sample_data:
@@ -282,7 +300,8 @@ async def get_score_for_image_referenced(
             visual_intent,
             gt_image_base64,
             model_image_base64,
-            model_name
+            model_name,
+            api_key,
         ) for dim in dims
     ]
 
