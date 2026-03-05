@@ -249,6 +249,7 @@ async def generate_diagram(
     max_critic_rounds: int = Body(3, description="The maximum number of critique and revision rounds to perform. This controls how many times the agents will iteratively improve the diagram based on feedback.", gt=0),
     pipeline_type: typing.Literal['vanilla', 'planner', 'planner_stylist', 'planner_critic', 'full'] = Body('full', description="The type of pipeline to use for processing. Supported values are 'vanilla', 'planner', 'planner_stylist', 'planner_critic', and 'full'."),
     return_detailed: bool = Body(False, description="Whether to return detailed intermediate outputs from all agents in the response."),
+    timeout: typing.Optional[float] = Body(None, description="Optional timeout in seconds for the entire processing of the request. If the processing time exceeds this limit, the task will be cancelled and a timeout error will be returned.", examples=[None]),
     auth_token: str = Depends(verify_token)
 ):
     data = {
@@ -272,6 +273,7 @@ async def generate_diagram(
         auth_token=auth_token,
     ))
 
+    counter = 0
     while not task.done():
         if (await request.state.is_disconnected()):
             LOGGER.info("Client disconnected, cancelling the task...")
@@ -282,6 +284,15 @@ async def generate_diagram(
                 LOGGER.info("Task cancelled successfully.")
             return
         await asyncio.sleep(0.1)
+        counter += 0.1
+        if timeout is not None and counter >= timeout:
+            LOGGER.info(f"Request processing exceeded timeout of {timeout} seconds, cancelling the task...")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully due to timeout.")
+            return JSONResponse({"error": "Request processing exceeded timeout limit."}, status_code=504)
 
     return await task
 
@@ -298,6 +309,7 @@ async def generate_plot(
     max_critic_rounds: int = Body(3, description="The maximum number of critique and revision rounds to perform. This controls how many times the agents will iteratively improve the diagram based on feedback.", gt=0),
     pipeline_type: typing.Literal['vanilla', 'planner', 'planner_stylist', 'planner_critic', 'full'] = Body('full', description="The type of pipeline to use for processing. Supported values are 'vanilla', 'planner', 'planner_stylist', 'planner_critic', and 'full'."),
     return_detailed: bool = Body(False, description="Whether to return detailed intermediate outputs from all agents in the response."),
+    timeout: typing.Optional[float] = Body(None, description="Optional timeout in seconds for the entire processing of the request. If the processing time exceeds this limit, the task will be cancelled and a timeout error will be returned.", examples=[None]),
     auth_token: str = Depends(verify_token)
 ):
     
@@ -322,6 +334,7 @@ async def generate_plot(
         auth_token=auth_token,
     ))
 
+    counter = 0
     while not task.done():
         if (await request.state.is_disconnected()):
             LOGGER.info("Client disconnected, cancelling the task...")
@@ -332,6 +345,15 @@ async def generate_plot(
                 LOGGER.info("Task cancelled successfully.")
             return
         await asyncio.sleep(0.1)
+        counter += 0.1
+        if timeout is not None and counter >= timeout:
+            LOGGER.info(f"Request processing exceeded timeout of {timeout} seconds, cancelling the task...")
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.info("Task cancelled successfully due to timeout.")
+            return JSONResponse({"error": "Request processing exceeded timeout limit."}, status_code=504)
 
     return await task
 
@@ -346,6 +368,7 @@ async def polish_image(
     temperature: float = Body(1.0, description="The temperature setting for the language model, controlling the randomness of the output. Higher values (e.g., 1.0) produce more random outputs, while lower values (e.g., 0.2) produce more focused and deterministic outputs.", gt=0.0, lt=2.0),
     aspect_ratio: typing.Literal['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '9:21', '21:9'] = Body('21:9', description="The desired aspect ratio for the generated diagram."),
     return_detailed: bool = Body(False, description="Whether to return detailed intermediate outputs from all agents in the response."),
+    timeout: typing.Optional[float] = Body(None, description="Optional timeout in seconds for the entire processing of the request. If the processing time exceeds this limit, the task will be cancelled and a timeout error will be returned.", examples=[None]),
     auth_token: str = Depends(verify_token)
 ):
     
@@ -384,6 +407,7 @@ async def polish_image(
     LOGGER.info(f"Processing polish {task_name} with model_name: {model_name}, image_model_name: {image_model_name}, temperature: {temperature}, aspect_ratio: {aspect_ratio}")
     with processor.with_config(api_key=auth_token):
         task = asyncio.create_task(processor.process_single_query(data, do_eval=False))
+        counter = 0
         while not task.done():
             if (await request.state.is_disconnected()):
                 LOGGER.info("Client disconnected, cancelling the polish task...")
@@ -398,6 +422,15 @@ async def polish_image(
                     LOGGER.info("Task cancelled successfully.")
                 return
             await asyncio.sleep(0.1)
+            counter += 0.1
+            if timeout is not None and counter >= timeout:
+                LOGGER.info(f"Request processing exceeded timeout of {timeout} seconds, cancelling the task...")
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    LOGGER.info("Task cancelled successfully due to timeout.")
+                return JSONResponse({"error": "Request processing exceeded timeout limit."}, status_code=504)
         result = await task
     
     # delete the temporary image after processing
