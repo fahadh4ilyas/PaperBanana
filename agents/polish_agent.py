@@ -18,6 +18,7 @@ Polish Agent - Applies style guidelines to ground truth images
 
 import base64
 import io
+import json
 from pathlib import Path
 from typing import Dict, Any
 from google.genai import types
@@ -162,7 +163,13 @@ class PolishAgent(BaseAgent):
         
         # Step 2: Polish Image using suggestions
         print(f"🎨 [Step 2] Polishing image with suggestions...")
-        user_prompt = f"Please polish this image based on the following suggestions:\n\n{suggestions}\n\nPolished Image:"
+        content = ""
+        if task_name == "plot":
+            raw_content = data.get("content", "")
+            content = json.dumps(raw_content) if isinstance(raw_content, (dict, list)) else raw_content
+            if content:
+                content = f"Here is plot raw data:\n{content}\n\n"
+        user_prompt = f"Please polish this image based on the following suggestions:\n\n{suggestions}\n\n{content}Polished Image:"
         
         # Build content list with GT image
         content_list = [

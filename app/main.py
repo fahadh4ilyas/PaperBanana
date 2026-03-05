@@ -363,6 +363,7 @@ async def polish_image(
     request: Request,
     image_base64: str = Body(..., description="The input diagram or plot to be polished, provided as a base64-encoded string of the image in JPG format."),
     task_name: typing.Literal['diagram', 'plot'] = Body(..., description="The type of the task, either 'diagram' or 'plot'. This helps the polish agent understand the context and apply appropriate polishing strategies."),
+    input_data: typing.Optional[dict] = Body(None, description="The original input data used for generating the plot, provided as a JSON object. This is optional and only for plot polishing, as it can help the agent better understand the content and provide more accurate suggestions.", examples=[None]),
     model_name: str = Body('google/gemini-3-pro-preview', description="The name of the language model to use for processing."),
     image_model_name: str = Body('google/gemini-3-pro-image-preview', description="The name of the image generation model to use for processing."),
     temperature: float = Body(1.0, description="The temperature setting for the language model, controlling the randomness of the output. Higher values (e.g., 1.0) produce more random outputs, while lower values (e.g., 0.2) produce more focused and deterministic outputs.", gt=0.0, lt=2.0),
@@ -392,6 +393,8 @@ async def polish_image(
             "rounded_ratio": aspect_ratio,
         },
     }
+    if task_name == "plot" and input_data is not None:
+        data["content"] = input_data
 
     processor = PaperVizProcessor(
         exp_config=exp_config,
