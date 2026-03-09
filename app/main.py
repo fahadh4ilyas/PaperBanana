@@ -238,7 +238,7 @@ async def generate(
     return JSONResponse(result) if return_detailed else JSONResponse({f"target_{task_name}_base64_jpg": result[result["eval_image_field"]]})
 
 
-@app.post('/diagram', tags=['generate'])
+@app.post('/generate/diagram', tags=['generate'])
 async def generate_diagram(
     request: Request,
     method_section: str = Body(..., description="The method section of the scientific paper to visualize, provided as plain text. Markdown format is recommended.", examples=[EXAMPLE_METHOD]),
@@ -298,7 +298,7 @@ async def generate_diagram(
     return await task
 
 
-@app.post('/plot', tags=['generate'])
+@app.post('/generate/plot', tags=['generate'])
 async def generate_plot(
     request: Request,
     input_data: dict = Body(..., description="The input data for generating the plot.", examples=[EXAMPLE_INPUT_DATA]),
